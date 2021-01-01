@@ -13,6 +13,7 @@ import collections
 import math
 import time
 
+from matplotlib import pyplot as plt
 from argparse import Namespace
 
 EPS = 1e-12
@@ -475,6 +476,15 @@ def save_images(fetches, a, step=None):
     return filesets
 
 
+def show_images(fetches):
+    plt.figure(figsize=(16, 16))
+    for i, kind in enumerate(["inputs", "outputs", "targets"]):
+        img = fetches[kind][0]
+        plt.subplot(1, 3, i + 1)
+        plt.imshow(img)
+    plt.show()
+
+
 def append_index(filesets, a, step=False):
     index_path = os.path.join(a.output_dir, "index.html")
     if os.path.exists(index_path):
@@ -501,13 +511,12 @@ def append_index(filesets, a, step=False):
 
 
 def get_default_args():
-    # Change to JSON loading
     default_args = {
         'input_dir': None,
         'mode': None,
         'output_dir': None,
-        'seed': None,           # None
-        'checkpoint': None,     # None
+        'seed': None,
+        'checkpoint': None,
         'max_steps': None,
         'max_epochs': None,
         'summary_freq': 100,
@@ -533,6 +542,7 @@ def get_default_args():
     }
     return default_args
 
+
 def set_args(args, setter_args):
     for key in setter_args:
         if key in args:
@@ -541,16 +551,23 @@ def set_args(args, setter_args):
             print('WARNING: Key {} not found'.format(key))
 
 
-def train(req_args):
-    assert(len(req_args) >= 2)
+def train(mode, input_dir, output_dir, args):
     default_args = get_default_args()
+
+    req_args = {
+        'mode': mode,
+        'input_dir': input_dir,
+        'output_dir': output_dir,
+    }
+
     set_args(default_args, req_args)
+    set_args(default_args, args)
+
     main(default_args)
 
 
 def main(a):
     a = Namespace(**a)
-    print(a)
 
     if a.seed is None:
         a.seed = random.randint(0, 2**31 - 1)
@@ -687,11 +704,18 @@ def main(a):
         converted_outputs = convert(outputs)
 
     with tf.name_scope("encode_images"):
-        display_fetches = {
+        save_fetches = {
             "paths": examples.paths,
             "inputs": tf.map_fn(tf.image.encode_png, converted_inputs, dtype=tf.string, name="input_pngs"),
             "targets": tf.map_fn(tf.image.encode_png, converted_targets, dtype=tf.string, name="target_pngs"),
             "outputs": tf.map_fn(tf.image.encode_png, converted_outputs, dtype=tf.string, name="output_pngs"),
+        }
+
+        display_fetches = {
+            "paths": examples.paths,
+            "inputs": converted_inputs,
+            "targets": converted_targets,
+            "outputs": converted_outputs,
         }
 
     # summaries
@@ -787,16 +811,17 @@ def main(a):
                 results = sess.run(fetches, options=options, run_metadata=run_metadata)
 
                 if should(a.summary_freq):
-                    print("recording summary")
+                    print("Recording summary...")
                     sv.summary_writer.add_summary(results["summary"], results["global_step"])
 
                 if should(a.display_freq):
-                    print("saving display images")
-                    filesets = save_images(results["display"], a, step=results["global_step"])
-                    append_index(filesets, a, step=True)
+                    # print("saving display images")
+                    # filesets = save_images(results["display"], a, step=results["global_step"])
+                    # append_index(filesets, a, step=True)
+                    show_images(results["display"])
 
                 if should(a.trace_freq):
-                    print("recording trace")
+                    print("Recording trace...")
                     sv.summary_writer.add_run_metadata(run_metadata, "step_%d" % results["global_step"])
 
                 if should(a.progress_freq):
@@ -805,14 +830,16 @@ def main(a):
                     train_step = (results["global_step"] - 1) % examples.steps_per_epoch + 1
                     rate = (step + 1) * a.batch_size / (time.time() - start)
                     remaining = (max_steps - step) * a.batch_size / rate
-                    print("progress  epoch %d  step %d  image/sec %0.1f  remaining %dm" % (train_epoch, train_step, rate, remaining / 60))
-                    print("discrim_loss", results["discrim_loss"])
-                    print("gen_loss_GAN", results["gen_loss_GAN"])
-                    print("gen_loss_L1", results["gen_loss_L1"])
+                    progress = step / max_steps * 100
+                    print("Progress: %d%%;  Epoch %d;  Step %d;  image/sec %0.1f;  Remaining %dm." % (progress, train_epoch, train_step, rate, remaining / 60))
+                    # print("discrim_loss", results["discrim_loss"])
+                    # print("gen_loss_GAN", results["gen_loss_GAN"])
+                    # print("gen_loss_L1", results["gen_loss_L1"])
 
                 if should(a.save_freq):
-                    print("saving model")
+                    print("Saving model...")
                     saver.save(sess, os.path.join(a.output_dir, "model"), global_step=sv.global_step)
+                    print("Model saved.")
 
                 if sv.should_stop():
                     break
