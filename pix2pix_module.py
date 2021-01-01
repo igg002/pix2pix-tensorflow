@@ -551,7 +551,7 @@ def set_args(args, setter_args):
             print('WARNING: Key {} not found'.format(key))
 
 
-def train(mode, input_dir, output_dir, args):
+def run(mode, input_dir, output_dir, args):
     default_args = get_default_args()
 
     req_args = {
@@ -771,7 +771,7 @@ def main(a):
             start = time.time()
             max_steps = min(examples.steps_per_epoch, max_steps)
             for step in range(max_steps):
-                results = sess.run(display_fetches)
+                results = sess.run(save_fetches)
                 filesets = save_images(results, a)
                 for i, f in enumerate(filesets):
                     print("evaluated image", f["name"])
